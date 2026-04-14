@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="HORMUZ">
+    <meta name="theme-color" content="#0A84FF">
+    <meta name="description" content="Real-time maritime intelligence for the Strait of Hormuz">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- iOS Icons -->
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="icons/icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="icons/icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-192x192.png">
+    
+    <!-- iOS Splash Screens -->
+    <link rel="apple-touch-startup-image" href="splash/splash-1125x2436.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="splash/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+    
+    <title>HORMUZ WATCH</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --safe-top: env(safe-area-inset-top, 59px);
+            --safe-bottom: env(safe-area-inset-bottom, 34px);
+            --safe-left: env(safe-area-inset-left, 0px);
+            --safe-right: env(safe-area-inset-right, 0px);
+            --ios-bg: #000000;
+            --ios-card: rgba(28, 28, 30, 0.85);
+            --ios-cyan: #0A84FF;
+            --ios-red: #FF453A;
+            --ios-yellow: #FF9F0A;
+            --ios-green: #30D158;
+        }
+
+        * {
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            box-sizing: border-box;
+        }
+
+        html {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+            background: var(--ios-bg);
+            color: #ffffff;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            position: fixed;
+            overscroll-behavior: none;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* PWA Standalone Mode Optimizations */
+        @media (display-mode: standalone) {
+            .standalone-only { display: flex !important; }
+            .browser-only { display: none !important; }
+            
+            /* Extra padding for home indicator in standalone */
+            .bottom-safe { padding-bottom: max(34px, env(safe-area-inset-bottom)) !important; }
+        }
+
+        @media (display-mode: browser) {
+            .standalone-only { display: none !important; }
+            .browser-only { display: block !important; }
+        }
+
+        /* Responsive Breakpoints */
+        /* iPhone SE / Mini */
+        @media (max-width: 375px) {
+            .text-adaptive { font-size: 14px; }
+            .fab { width: 48px; height: 48px; font-size: 20px; }
+        }
+
+        /* iPhone 14/15/16/17 Pro */
+        @media (min-width: 376px) and (max-width: 430px) {
+            .text-adaptive { font-size: 16px; }
+        }
+
+        /* iPhone 17 Pro Max / Plus */
+        @media (min-width: 431px) {
+            .text-adaptive { font-size: 17px; }
+            .fab { width: 60px; height: 60px; font-size: 26px; }
+        }
+
+        /* iPad */
+        @media (min-width: 768px) {
+            .ipad-sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                width: 320px;
+                background: rgba(0,0,0,0.8);
+                backdrop-filter: blur(20px);
+                z-index: 100;
+            }
+            .ipad-map { margin-left: 320px; }
+        }
+
+        /* Landscape Optimizations */
+        @media (orientation: landscape) and (max-height: 500px) {
+            .landscape-hide { display: none !important; }
+            .landscape-compact { transform: scale(0.8); transform-origin: top left; }
+            .bottom-sheet { max-height: 40vh; }
+        }
+
+        /* Map */
+        #map {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1;
+            background: #0a0f1a;
+        }
+
+        /* iOS Components */
+        .ios-card {
+            background: var(--ios-card);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 0.5px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .ios-card-compact {
+            background: rgba(28, 28, 30, 0.9);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            border: 0.5px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .fab {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: var(--ios-cyan);
+            box-shadow: 0 4px 20px rgba(10, 132, 255, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            transition: all 0.2s;
+            border: none;
+            outline: none;
+        }
+
+        .fab:active { transform: scale(0.92); opacity: 0.8; }
+        .fab-secondary {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .ios-segment {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 2px;
+            display: flex;
+        }
+
+        .ios-segment-btn {
+            flex: 1;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.6);
+            transition: all 0.2s;
+            text-align: center;
+            border: none;
+            background: transparent;
+        }
+
+        .ios-segment-btn.active {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        .ios-toggle {
+            width: 51px;
+            height: 31px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            position: relative;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+
+        .ios-toggle.active { background: var(--ios-cyan); }
+        .ios-toggle::after {
+            content: '';
+            position: absolute;
+            width: 27px;
+            height: 27px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .ios-toggle.active::after { transform: translateX(20px); }
+
+        .ios-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .ios-chip-alert {
+            background: rgba(255, 69, 58, 0.2);
+            color: #FF453A;
+        }
+
+        .ios-list {
+            background: var(--ios-card);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .ios-list-item {
+            padding: 12px 16px;
+            border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .ios-list-item:last-child { border-bottom: none; }
+        .ios-list-item:active { background: rgba(255,255,255,0.05); }
+
+        /* Bottom Sheet */
+        .bottom-sheet {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 500;
+            transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+            padding-bottom: env(safe-area-inset-bottom, 34px);
+        }
+
+        .bottom-sheet-handle {
+            width: 36px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+            margin: 8px auto;
+        }
+
+        /* Typography */
+        .text-caption {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 500;
+        }
+
+        .text-body { font-size: 16px; font-weight: 400; }
+        .text-headline { font-size: 20px; font-weight: 600; }
+        .text-title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+
+        /* Loading Screen */
+        .ios-loading {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.3s;
+        }
+
+        .ios-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top-color: var(--ios-cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Install Prompt */
+        .install-prompt {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%) translateY(200%);
+            background: rgba(10, 132, 255, 0.95);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 100px;
+            font-weight: 600;
+            font-size: 14px;
+            z-index: 2000;
+            transition: transform 0.3s;
+            box-shadow: 0 4px 20px rgba(10, 132, 255, 0.4);
+        }
+
+        .install-prompt.show { transform: translateX(-50%) translateY(0); }
+
+        /* Offline Indicator */
+        .offline-bar {
+            position: fixed;
+            top: env(safe-area-inset-top, 0);
+            left: 0;
+            right: 0;
+            background: #FF453A;
+            color: white;
+            text-align: center;
+            padding: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            z-index: 3000;
+            transform: translateY(-100%);
+            transition: transform 0.3s;
+        }
+
+        .offline-bar.show { transform: translateY(0); }
+
+        /* Haptic */
+        .haptic { transition: transform 0.05s; }
+        .haptic:active { transform: scale(0.97); }
+
+        /* Reduced Motion */
+        @media (prefers-reduced-motion: reduce) {
+            * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+        }
+
+        /* Dark Mode (always on for this app) */
+        @media (prefers-color-scheme: light) {
+            /* Keep dark regardless of system preference */
+        }
+    </style>
+</head>
+<body>
+    <!-- Offline Indicator -->
+    <div class="offline-bar" id="offlineBar">
+        <i class="fas fa-wifi-slash mr-2"></i>OFFLINE MODE - Cached Data
+    </div>
+
+    <!-- Loading Screen -->
+    <div class="ios-loading" id="loading">
+        <div class="ios-spinner mb-4"></div>
+        <div class="text-caption mb-2">HORMUZ WATCH</div>
+        <div class="text-body text-gray-400">Initializing tactical feed...</div>
+        <div class="text-xs text-gray-600 mt-4" id="loadingStatus">Checking connection...</div>
+    </div>
+
+    <!-- Install Prompt (Browser Only) -->
+    <div class="install-prompt browser-only" id="installPrompt" onclick="showInstallInstructions()">
+        <i class="fas fa-download mr-2"></i>Add to Home Screen
+    </div>
+
+    <!-- Status Bar -->
+    <div class="fixed top-0 left-0 right-0 h-[env(safe-area-inset-top,0)] z-[1000] bg-gradient-to-b from-black/80 to-transparent pointer-events-none"></div>
+
+    <!-- Map -->
+    <div id="map"></div>
+
+    <!-- Top Bar -->
+    <div class="fixed top-[calc(env(safe-area-inset-top)+8px)] left-4 right-4 z-50 flex justify-between items-start pointer-events-none">
+        <div class="ios-card-compact px-4 py-3 pointer-events-auto flex items-center gap-3">
+            <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+            <div>
+                <div class="text-xs font-semibold text-white">LIVE</div>
+                <div class="text-[10px] text-gray-400 mono" id="top-clock">00:00</div>
+            </div>
+        </div>
+
+        <div class="ios-chip ios-chip-alert pointer-events-auto haptic" onclick="toggleAlerts()">
+            <i class="fas fa-exclamation-triangle text-xs"></i>
+            <span class="font-semibold">ELEVATED</span>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="fixed top-[calc(env(safe-area-inset-top)+70px)] right-4 z-40 flex flex-col gap-3 pointer-events-none">
+        <button class="fab fab-secondary pointer-events-auto haptic" onclick="centerOnStrait()" aria-label="Center">
+            <i class="fas fa-crosshairs"></i>
+        </button>
+        <button class="fab fab-secondary pointer-events-auto haptic" onclick="toggleLayersPanel()" aria-label="Layers">
+            <i class="fas fa-layer-group"></i>
+        </button>
+        <button class="fab pointer-events-auto haptic" onclick="toggleMilitaryView()" aria-label="Military">
+            <i class="fas fa-shield-alt"></i>
+        </button>
+    </div>
+
+    <!-- Bottom Sheet -->
+    <div class="bottom-sheet" id="bottomSheet" style="transform: translateY(30%);">
+        <div class="ios-card mx-2 mb-2 max-h-[70vh] flex flex-col">
+            <div class="bottom-sheet-handle" id="sheetHandle"></div>
+            
+            <div class="px-4 pb-3 border-b border-white/10 flex justify-between items-center">
+                <div>
+                    <div class="text-caption mb-1">STRAIT OF HORMUZ</div>
+                    <div class="text-headline">Tactical Overview</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-[28px] font-bold text-cyan-400 mono" id="vessel-count">0</div>
+                    <div class="text-xs text-gray-400">Active Vessels</div>
+                </div>
+            </div>
+
+            <div class="overflow-y-auto flex-1 px-4 py-3 space-y-4" id="sheetContent">
+                <div class="ios-segment">
+                    <button class="ios-segment-btn active" onclick="switchTab('overview', this)">Overview</button>
+                    <button class="ios-segment-btn" onclick="switchTab('military', this)">Military</button>
+                    <button class="ios-segment-btn" onclick="switchTab('alerts', this)">Alerts</button>
+                </div>
+
+                <!-- Overview Tab -->
+                <div id="tab-overview" class="tab-content">
+                    <div class="grid grid-cols-3 gap-2 mb-4">
+                        <div class="ios-card-compact p-3 text-center">
+                            <div class="text-[24px] font-bold text-yellow-400 mono" id="stat-tankers">0</div>
+                            <div class="text-[11px] text-gray-400 mt-1">Tankers</div>
+                        </div>
+                        <div class="ios-card-compact p-3 text-center">
+                            <div class="text-[24px] font-bold text-blue-400 mono" id="stat-container">0</div>
+                            <div class="text-[11px] text-gray-400 mt-1">Container</div>
+                        </div>
+                        <div class="ios-card-compact p-3 text-center">
+                            <div class="text-[24px] font-bold text-gray-400 mono" id="stat-transit">0%</div>
+                            <div class="text-[11px] text-gray-400 mt-1">Capacity</div>
+                        </div>
+                    </div>
+
+                    <div class="ios-card-compact p-3 mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs font-semibold text-gray-300">7-Day Transit</span>
+                            <span class="text-[10px] text-red-400">-85% vs normal</span>
+                        </div>
+                        <div class="h-[100px]">
+                            <canvas id="transitChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between py-2">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                                    <i class="fas fa-ship text-cyan-400 text-sm"></i>
+                                </div>
+                                <span class="text-body">Commercial Vessels</span>
+                            </div>
+                            <div class="ios-toggle active" onclick="this.classList.toggle('active'); toggleLayer('commercial')"></div>
+                        </div>
+                        <div class="flex items-center justify-between py-2">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
+                                    <i class="fas fa-crosshairs text-red-400 text-sm"></i>
+                                </div>
+                                <span class="text-body">Military Assets</span>
+                            </div>
+                            <div class="ios-toggle active" onclick="this.classList.toggle('active'); toggleLayer('military')"></div>
+                        </div>
+                        <div class="flex items-center justify-between py-2">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                                    <i class="fas fa-exclamation-circle text-yellow-400 text-sm"></i>
+                                </div>
+                                <span class="text-body">Hazard Zones</span>
+                            </div>
+                            <div class="ios-toggle active" onclick="this.classList.toggle('active'); toggleLayer('zones')"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Military Tab -->
+                <div id="tab-military" class="tab-content hidden">
+                    <div class="ios-list mb-4" id="military-list"></div>
+                    <div class="ios-card-compact p-3 border-l-4 border-red-500">
+                        <div class="flex items-start gap-3">
+                            <i class="fas fa-radiation text-red-400 mt-1"></i>
+                            <div>
+                                <div class="font-semibold text-sm mb-1">Threat Assessment</div>
+                                <div class="text-xs text-gray-400 leading-relaxed">
+                                    Elevated naval presence. IRGCN patrol craft within 12nm of coalition vessels.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alerts Tab -->
+                <div id="tab-alerts" class="tab-content hidden">
+                    <div id="alert-feed-mobile" class="space-y-2"></div>
+                </div>
+            </div>
+
+            <div class="h-[env(safe-area-inset-bottom,0)]"></div>
+        </div>
+    </div>
+
+    <!-- Layers Panel -->
+    <div class="fixed inset-0 z-[600] pointer-events-none" id="layersPanel">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity duration-300 pointer-events-auto" onclick="toggleLayersPanel()"></div>
+        <div class="absolute top-0 right-0 bottom-0 w-[85%] max-w-[320px] bg-[#1c1c1e] transform translate-x-full transition-transform duration-300 pointer-events-auto flex flex-col">
+            <div class="h-[env(safe-area-inset-top,0)]"></div>
+            <div class="p-4 border-b border-white/10 flex items-center justify-between">
+                <div class="text-headline">Map Layers</div>
+                <button onclick="toggleLayersPanel()" class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center haptic">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                <div class="ios-list">
+                    <div class="ios-list-item haptic">
+                        <span>AIS Vessels</span>
+                        <i class="fas fa-check text-cyan-400"></i>
+                    </div>
+                    <div class="ios-list-item haptic">
+                        <span>Military Tracking</span>
+                        <i class="fas fa-check text-cyan-400"></i>
+                    </div>
+                    <div class="ios-list-item haptic">
+                        <span>Satellite Imagery</span>
+                        <span class="text-gray-500">Off</span>
+                    </div>
+                    <div class="ios-list-item haptic">
+                        <span>Weather Overlay</span>
+                        <span class="text-gray-500">Off</span>
+                    </div>
+                </div>
+                
+                <div class="text-caption px-2">DATA SOURCES</div>
+                <div class="ios-list">
+                    <div class="ios-list-item">
+                        <div class="flex items-center gap-3">
+                            <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                            <span>aisstream.io</span>
+                        </div>
+                    </div>
+                    <div class="ios-list-item">
+                        <div class="flex items-center gap-3">
+                            <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                            <span>PortWatch API</span>
+                        </div>
+                    </div>
+                    <div class="ios-list-item">
+                        <div class="flex items-center gap-3">
+                            <div class="w-2 h-2 rounded-full bg-yellow-500"></div>
+                            <span>OSINT Feeds</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-caption px-2 mt-4">APP INFO</div>
+                <div class="ios-list">
+                    <div class="ios-list-item haptic" onclick="checkForUpdate()">
+                        <span>Check for Updates</span>
+                        <i class="fas fa-chevron-right text-gray-500 text-xs"></i>
+                    </div>
+                    <div class="ios-list-item">
+                        <span>Version</span>
+                        <span class="text-gray-500 mono">1.0.0</span>
+                    </div>
+                    <div class="ios-list-item">
+                        <span>Cache Status</span>
+                        <span class="text-green-400 text-xs" id="cacheStatus">Ready</span>
+                    </div>
+                </div>
+            </div>
+            <div class="h-[env(safe-area-inset-bottom,0)]"></div>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div class="fixed inset-0 z-[700] bg-black transform translate-y-full transition-transform duration-300 flex flex-col" id="detailModal">
+        <div class="h-[env(safe-area-inset-top,0)] bg-[#1c1c1e]"></div>
+        <div class="bg-[#1c1c1e] px-4 py-3 flex items-center justify-between border-b border-white/10">
+            <button onclick="closeDetail()" class="text-cyan-400 font-semibold haptic">Done</button>
+            <div class="font-semibold" id="detailTitle">Vessel Details</div>
+            <button class="text-cyan-400 haptic" onclick="shareVessel()"><i class="fas fa-share-alt"></i></button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4" id="detailContent"></div>
+        <div class="h-[env(safe-area-inset-bottom,0)] bg-[#1c1c1e]"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // PWA Registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(registration => {
+                        console.log('[PWA] SW registered:', registration);
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    showUpdateNotification();
+                                }
+                            });
+                        });
+                    })
+                    .catch(error => {
+                        console.log('[PWA] SW registration failed:', error);
+                    });
+            });
+        }
+
+        // Online/Offline Detection
+        function updateOnlineStatus() {
+            const offlineBar = document.getElementById('offlineBar');
+            const cacheStatus = document.getElementById('cacheStatus');
+            
+            if (!navigator.onLine) {
+                offlineBar.classList.add('show');
+                cacheStatus.textContent = 'Offline Mode';
+                cacheStatus.className = 'text-yellow-400 text-xs';
+            } else {
+                offlineBar.classList.remove('show');
+                cacheStatus.textContent = 'Ready';
+                cacheStatus.className = 'text-green-400 text-xs';
+            }
+        }
+
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+
+        // Install Prompt Logic
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            setTimeout(() => {
+                document.getElementById('installPrompt').classList.add('show');
+            }, 3000);
+        });
+
+        // Global Variables
+        let map;
+        let layers = {
+            commercial: L.layerGroup(),
+            military: L.layerGroup(),
+            zones: L.layerGroup(),
+            heatmap: L.layerGroup()
+        };
+        let currentBottomSheetState = 'half';
+
+        function initMap() {
+            map = L.map('map', {
+                zoomControl: false,
+                attributionControl: false,
+                minZoom: 5,
+                maxZoom: 15,
+                tap: true,
+                touchZoom: true,
+                dragging: true,
+                preferCanvas: true
+            }).setView([26.5, 56.5], 8);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; CARTO',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(map);
+
+            Object.values(layers).forEach(layer => layer.addTo(map));
+
+            drawZones();
+            addVessels();
+            addMilitary();
+        }
+
+        function drawZones() {
+            const zones = [
+                { center: [26.5, 56.5], radius: 15000, color: '#FF453A', fillOpacity: 0.1 },
+                { center: [26.2, 56.0], radius: 20000, color: '#FF453A', fillOpacity: 0.2, dash: true }
+            ];
+
+            zones.forEach(z => {
+                L.circle(z.center, {
+                    color: z.color,
+                    fillColor: z.color,
+                    fillOpacity: z.fillOpacity,
+                    weight: z.dash ? 2 : 1,
+                    dashArray: z.dash ? '10,5' : null,
+                    radius: z.radius
+                }).addTo(layers.zones);
+            });
+        }
+
+        function addVessels() {
+            const types = [
+                { name: 'Tanker', color: '#FF9F0A', icon: 'fa-oil-can' },
+                { name: 'Container', color: '#0A84FF', icon: 'fa-box' },
+                { name: 'Bulk', color: '#8E8E93', icon: 'fa-weight-hanging' }
+            ];
+
+            let tankers = 0, containers = 0, bulk = 0;
+
+            for (let i = 0; i < 40; i++) {
+                const type = types[Math.floor(Math.random() * types.length)];
+                const lat = 25.5 + Math.random() * 1.5;
+                const lng = 55.0 + Math.random() * 2.0;
+                
+                if (type.name === 'Tanker') tankers++;
+                else if (type.name === 'Container') containers++;
+                else bulk++;
+
+                const icon = L.divIcon({
+                    className: 'custom-marker',
+                    html: `<div style="color: ${type.color}; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                            <i class="fas ${type.icon} text-lg" style="transform: rotate(${Math.random()*360}deg);"></i>
+                           </div>`,
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 20]
+                });
+
+                const marker = L.marker([lat, lng], { icon }).addTo(layers.commercial);
+                marker.on('click', () => showVesselDetail({
+                    name: `${type.name} ${String.fromCharCode(65+i)}-${Math.floor(Math.random()*999)}`,
+                    type: type.name,
+                    lat, lng,
+                    speed: (Math.random()*15).toFixed(1),
+                    status: Math.random() > 0.5 ? 'Underway' : 'Anchored',
+                    destination: Math.random() > 0.5 ? 'Jebel Ali' : 'Fujairah'
+                }));
+            }
+
+            document.getElementById('stat-tankers').textContent = tankers;
+            document.getElementById('stat-container').textContent = containers;
+            document.getElementById('vessel-count').textContent = tankers + containers + bulk;
+            document.getElementById('stat-transit').textContent = Math.floor(Math.random() * 15 + 5) + '%';
+        }
+
+        function addMilitary() {
+            const assets = [
+                { name: 'USS Abraham Lincoln', type: 'Carrier', country: 'US', lat: 26.8, lng: 56.2, color: '#0A84FF' },
+                { name: 'IRGCN Patrol Group', type: 'Fast Attack', country: 'IR', lat: 26.4, lng: 56.1, color: '#FF453A' },
+                { name: 'HMS Diamond', type: 'Destroyer', country: 'UK', lat: 26.9, lng: 56.6, color: '#30D158' },
+                { name: 'FS Languedoc', type: 'Frigate', country: 'FR', lat: 26.75, lng: 56.45, color: '#BF5AF2' }
+            ];
+
+            const listContainer = document.getElementById('military-list');
+            
+            assets.forEach(asset => {
+                const icon = L.divIcon({
+                    className: 'military-marker',
+                    html: `<i class="fas fa-ship text-white text-lg"></i>`,
+                    iconSize: [44, 44],
+                    iconAnchor: [22, 22]
+                });
+
+                const marker = L.marker([asset.lat, asset.lng], { icon }).addTo(layers.military);
+                marker.getElement().style.color = asset.color;
+
+                const item = document.createElement('div');
+                item.className = 'ios-list-item haptic';
+                item.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center" style="background: ${asset.color}20;">
+                            <i class="fas fa-ship" style="color: ${asset.color};"></i>
+                        </div>
+                        <div>
+                            <div class="font-semibold text-sm">${asset.name}</div>
+                            <div class="text-xs text-gray-500">${asset.type} • ${asset.country}</div>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right text-gray-500 text-xs"></i>
+                `;
+                item.onclick = () => {
+                    map.flyTo([asset.lat, asset.lng], 11);
+                    setBottomSheetState('collapsed');
+                };
+                listContainer.appendChild(item);
+            });
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('transitChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['D-6', 'D-5', 'D-4', 'D-3', 'D-2', 'D-1', 'Now'],
+                    datasets: [{
+                        data: [12, 8, 15, 6, 9, 11, 9],
+                        borderColor: '#0A84FF',
+                        backgroundColor: 'rgba(10, 132, 255, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#0A84FF'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { display: true, grid: { display: false }, ticks: { color: '#8E8E93', font: { size: 10 } } },
+                        y: { display: false, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // Gestures
+        function setupGestures() {
+            const handle = document.getElementById('sheetHandle');
+            let startY = 0;
+            let startTransform = 0;
+
+            handle.addEventListener('touchstart', (e) => {
+                startY = e.touches[0].clientY;
+                startTransform = getCurrentTransform();
+            }, { passive: true });
+
+            handle.addEventListener('touchmove', (e) => {
+                const deltaY = e.touches[0].clientY - startY;
+                const newTransform = Math.max(0, startTransform + deltaY);
+                const maxExpand = window.innerHeight * 0.3;
+                const limitedTransform = Math.min(newTransform, maxExpand);
+                
+                if (currentBottomSheetState !== 'full' || deltaY > 0) {
+                    document.getElementById('bottomSheet').style.transform = `translateY(${limitedTransform})`;
+                }
+            }, { passive: true });
+
+            handle.addEventListener('touchend', (e) => {
+                const deltaY = e.changedTouches[0].clientY - startY;
+                if (deltaY > 80) {
+                    if (currentBottomSheetState === 'full') setBottomSheetState('half');
+                    else setBottomSheetState('collapsed');
+                } else if (deltaY < -80) {
+                    if (currentBottomSheetState === 'collapsed') setBottomSheetState('half');
+                    else setBottomSheetState('full');
+                } else {
+                    setBottomSheetState(currentBottomSheetState);
+                }
+            });
+        }
+
+        function getCurrentTransform() {
+            const style = document.getElementById('bottomSheet').style.transform;
+            if (!style) return 0;
+            const match = style.match(/translateY\(([^)]+)\)/);
+            return match ? match[1] : '30%';
+        }
+
+        function setBottomSheetState(state) {
+            currentBottomSheetState = state;
+            const heights = { 'collapsed': '85%', 'half': '30%', 'full': '10%' };
+            document.getElementById('bottomSheet').style.transform = `translateY(${heights[state]})`;
+        }
+
+        // UI Functions
+        function switchTab(tabName, btn) {
+            document.querySelectorAll('.ios-segment-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            if (navigator.vibrate) navigator.vibrate(10);
+        }
+
+        function toggleLayersPanel() {
+            const panel = document.getElementById('layersPanel');
+            const overlay = panel.querySelector('.absolute:first-child');
+            const drawer = panel.querySelector('.absolute:last-child');
+            
+            if (drawer.classList.contains('translate-x-full')) {
+                drawer.classList.remove('translate-x-full');
+                overlay.style.opacity = '1';
+            } else {
+                drawer.classList.add('translate-x-full');
+                overlay.style.opacity = '0';
+            }
+        }
+
+        function toggleMilitaryView() {
+            map.flyTo([26.6, 56.3], 9);
+            switchTab('military', document.querySelectorAll('.ios-segment-btn')[1]);
+            setBottomSheetState('half');
+        }
+
+        function centerOnStrait() {
+            map.flyTo([26.5, 56.5], 8, { duration: 1.5 });
+        }
+
+        function toggleLayer(layerName) {
+            if (map.hasLayer(layers[layerName])) {
+                map.removeLayer(layers[layerName]);
+            } else {
+                map.addLayer(layers[layerName]);
+            }
+        }
+
+        function showVesselDetail(vessel) {
+            const modal = document.getElementById('detailModal');
+            document.getElementById('detailTitle').textContent = vessel.name;
+            document.getElementById('detailContent').innerHTML = `
+                <div class="ios-card-compact p-4 mb-4">
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div><div class="text-caption mb-1">Type</div><div class="text-body font-semibold">${vessel.type}</div></div>
+                        <div><div class="text-caption mb-1">Status</div><div class="text-body font-semibold ${vessel.status === 'Anchored' ? 'text-yellow-400' : 'text-green-400'}">${vessel.status}</div></div>
+                        <div><div class="text-caption mb-1">Speed</div><div class="text-body font-semibold mono">${vessel.speed} kn</div></div>
+                        <div><div class="text-caption mb-1">Destination</div><div class="text-body font-semibold">${vessel.destination}</div></div>
+                    </div>
+                </div>
+                <div class="ios-list mb-4">
+                    <div class="ios-list-item haptic"><span>Track Vessel</span><i class="fas fa-satellite-dish text-cyan-400"></i></div>
+                    <div class="ios-list-item haptic"><span>View Route History</span><i class="fas fa-route text-cyan-400"></i></div>
+                    <div class="ios-list-item haptic"><span>Share Position</span><i class="fas fa-share-alt text-cyan-400"></i></div>
+                </div>
+                <button class="w-full py-3 bg-red-500/20 text-red-400 rounded-xl font-semibold haptic">Report Incident</button>
+            `;
+            modal.style.transform = 'translateY(0)';
+        }
+
+        function closeDetail() {
+            document.getElementById('detailModal').style.transform = 'translateY(100%)';
+        }
+
+        function shareVessel() {
+            if (navigator.share) {
+                navigator.share({
+                    title: 'HORMUZ WATCH',
+                    text: 'Check out this vessel position in the Strait of Hormuz',
+                    url: window.location.href
+                });
+            }
+        }
+
+        function toggleAlerts() {
+            switchTab('alerts', document.querySelectorAll('.ios-segment-btn')[2]);
+            setBottomSheetState('half');
+        }
+
+        function addAlert(msg, type) {
+            const feed = document.getElementById('alert-feed-mobile');
+            const colors = {
+                danger: 'border-red-500 bg-red-500/10',
+                warning: 'border-yellow-500 bg-yellow-500/10',
+                info: 'border-cyan-500 bg-cyan-500/10'
+            };
+            const alert = document.createElement('div');
+            alert.className = `p-3 rounded-lg border-l-4 ${colors[type]} flex items-start gap-3`;
+            alert.innerHTML = `
+                <i class="fas ${type === 'danger' ? 'fa-exclamation-circle text-red-400' : type === 'warning' ? 'fa-exclamation-triangle text-yellow-400' : 'fa-info-circle text-cyan-400'} mt-0.5"></i>
+                <div class="flex-1">
+                    <div class="text-sm leading-snug">${msg}</div>
+                    <div class="text-[10px] text-gray-500 mt-1">${new Date().toLocaleTimeString()}</div>
+                </div>
+            `;
+            feed.insertBefore(alert, feed.firstChild);
+            if (feed.children.length > 8) feed.removeChild(feed.lastChild);
+        }
+
+        function showInstallInstructions() {
+            alert('Tap the Share button in Safari, then "Add to Home Screen"');
+        }
+
+        function showUpdateNotification() {
+            if (confirm('Update available! Reload to update?')) {
+                window.location.reload();
+            }
+        }
+
+        function checkForUpdate() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.update();
+                    alert('Checking for updates...');
+                });
+            }
+        }
+
+        function startDataStream() {
+            const alerts = [
+                { msg: 'IRGCN patrol craft detected near USS Farragut', type: 'danger' },
+                { msg: 'Tanker MARAN GOLD stationary >24hrs', type: 'warning' },
+                { msg: 'AIS gap detected: Container vessel ZHONG DA', type: 'warning' }
+            ];
+            
+            alerts.forEach((alert, i) => {
+                setTimeout(() => addAlert(alert.msg, alert.type), i * 500);
+            });
+            
+            setInterval(() => {
+                document.getElementById('top-clock').textContent = 
+                    new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+            }, 1000);
+            
+            setInterval(() => {
+                if (Math.random() > 0.7) {
+                    const alert = alerts[Math.floor(Math.random() * alerts.length)];
+                    addAlert(alert.msg, alert.type);
+                }
+            }, 8000);
+        }
+
+        function refreshData() {
+            addAlert('Data refreshed - AIS stream updated', 'info');
+            if (navigator.vibrate) navigator.vibrate([50, 100, 50]);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            updateOnlineStatus();
+            initMap();
+            initChart();
+            setupGestures();
+            startDataStream();
+            
+            setTimeout(() => {
+                document.getElementById('loading').style.opacity = '0';
+                setTimeout(() => document.getElementById('loading').style.display = 'none', 300);
+            }, 1500);
+        });
+
+        window.addEventListener('orientationchange', () => {
+            setTimeout(() => map.invalidateSize(), 100);
+        });
+    </script>
+</body>
+</html>
